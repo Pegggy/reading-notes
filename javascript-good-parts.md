@@ -32,14 +32,54 @@ obj.f2();
 当函数并非一个对象的属性时，它就是被当做一个函数来调用的。此时 this 被绑定到全局对象上。
 ```js
 var a = 5
+function add(a,b){
+	return a + b
+}
 obj.add2 = function(){
-	var helper = function(){
-		this.a = add(this.a,this.a)
+    var helper = function(){
+	this.a = add(this.a,this.a)
     }
-	helper()
+    helper()
 }
 obj.add2()
 console.log(a)
 // 10
 ```
-当函数作为一个函数来调用时，this 指向的是 window,此时改变的是 window.a 的值。
+当函数作为一个函数来调用时，this 指向的是 window,此时改变的是 window.a 的值。而作为函数的方法调用时，this 指向的是调用该方法的对象。
+```js
+obj.add1 = function(){
+	this.a = add(this.a,this.a)
+}
+obj
+// {a: 2, fn: ƒ, add1: ƒ}
+```
+因此如果通过方法定义一个变量，并把它赋值为 this，那么内部函数就可以通过那个变量访问到 this。
+```js
+obj.add2 = function(){
+    var that = this
+    var helper = function(){
+	that.a = add(that.a,that.a)
+    }
+    helper()
+}
+obj
+// {a: 4, fn: ƒ, add1: ƒ, add2: ƒ}
+```
+
+### 构造器调用模式
+如果在一个函数前面带上 new 来调用，那么背地里会创建一个连接到该函数的 prototype 成员的新对象，同时 this 会绑定到那个新对象上。
+
+new 前缀也会改变 return 语句的行为。
+
+### apply 调用模式
+apply 方法让我们构建一个参数数组传递给调用函数，它允许我们选择 this 的值，apply 接收两个参数，第一个是要绑定给 this 的值，第二个是参数数组。
+
+## 返回
+当一个函数被调用时，它从第一个语句开始执行，直到关闭函数体的`}`时结束，然后把函数的控制权交还给调用该函数的程序。
+
+return 语句可以使函数提前返回，如果没有指定返回值，则返回一个 undefined。
+
+如果函数调用的时候在前面加上了 new 前缀，且返回值不是一个对象，则返回 this（该新对象）。
+
+
+第一个语句
