@@ -253,4 +253,38 @@ fade(document.body)
   }
   add_handlers(btns)
 ```
-当采用这种写法时，并不能达到预期效果，它总是会显示节点的数量。
+当采用这种写法时，并不能达到预期效果，它总是会显示节点的数量。因为事件处理函数绑定了变量 i 本身，而不是函数在构造时的变量 i 的值。所以我们通过闭包来改造这个函数：
+```js
+  var add_handlers = function(nodes){
+    for(var i = 0; i < nodes.length; i++){
+      nodes[i].onclick = (function(i){
+        return function(){
+          alert(i)
+        }
+      })(i)
+    }
+  }
+```
+
+## 回调
+函数使得对不连续事件的处理变得更容易。假定有这样一个序列，由用户的交互行为触发，向服务器发送请求，最终显示服务器的响应，最自然的写法可能会是这样的：
+```
+request = prepare_the_request()
+response = send_request_synchronously(request)
+display(response)
+```
+这种方式的问题在于，网络上的同步请求会导致客户端进入假死状态，如果网络传输或者服务器很慢，响应会慢到让人无法接受。
+
+更好的方式是发起异步请求，提供一个当服务器的响应到达是随即触发的回调函数，异步函数立即返回，这样客户端就不会被阻塞。
+```
+request = prepare_the_request()
+send_request_synchronously(request,function(response){
+    display(response)
+})
+```
+我们传递一个函数给 `send_request_synchronously` 函数，一旦接收响应，它就会被调用。
+
+## 模块
+我们可以使用函数和闭包来构造模块。模块是一个提供接口却隐藏状态与实现的函数或对象。
+
+模块模式的一般形式是：一个定义了私有变量和函数的函数；利用闭包创建可以访问私有变量和函数的特权函数；最后返回这个特权函数，或者把它们保存到一个可访问到的地方。
