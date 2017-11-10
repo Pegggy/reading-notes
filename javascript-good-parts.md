@@ -288,3 +288,124 @@ send_request_synchronously(request,function(response){
 我们可以使用函数和闭包来构造模块。模块是一个提供接口却隐藏状态与实现的函数或对象。
 
 模块模式的一般形式是：一个定义了私有变量和函数的函数；利用闭包创建可以访问私有变量和函数的特权函数；最后返回这个特权函数，或者把它们保存到一个可访问到的地方。
+
+使用模块模式就可以摈弃全局变量的使用，它促进了信息隐藏和其他优秀的设计实践。对于应用程序的封装，或者构造其他单例对象，模块模式非常有效。
+
+假定我们想要构造一个用来产生序列号的对象：
+```js
+/*
+ * 返回一个用来产生唯一字符串的对象
+ * 唯一的字符串由两部分组成：前缀 + 序列号
+ * 该对象包含一个设置前缀的方法，一个设置序列号的方法和产生唯一字符串的方法
+ */
+var serial_maker = function(){
+  var prefix = '', seq = 0
+  return {
+    setPrefix: function(p){
+      prefix = String(p)
+    },
+    setSeq: function(s){
+      seq = s
+    },
+    gensym: function(){
+      var result = prefix + seq
+      seq += 1
+      return result
+    }
+  }
+}
+var seqer = serial_maker()
+seqer.setPrefix('S')
+seqer.setSeq('12345')
+var unique = seqer.gensym()
+// "S12345"
+```
+seqer 包含的方法都没有用到 this，因此没有办法能够改变 seqer，除非调用对应的方法才可以更改 prefix 和 seq 的值。seqer 对象是可变的，所以它的方法可能会被替换掉，但替换后的方法依然不能访问私有成员，seqer 就是一组函数的集合，而且那些函数被授予访问和修改私有状态的能力。
+
+如果我们把 seqer.gensym 作为一个值传递给第三方函数，那个函数能产生唯一字符串，但却不能通过它来改变 prefix 和 seq 的值。
+
+## 级联
+有一些方法没有返回值。例如一些修改或设置对象的某个状态却不反悔任何值的方法就是典型的例子。如果我们让这些方法返回 this 而不是 undefined，就可以启用级联。在一个级联中，我们可以在单独一条语句中依次调用同一个对象的很多方法。一个启用级联的 Ajax类库可能允许我们以这样的形式去编码：
+```js
+getElement('myBoxDix')
+  .move(350,150)
+  .width(100)
+  .height(100)
+  .color('black')
+  .border('1px solid #fcc')
+  .padding('4px')
+  .on('mousedown',function(m){
+    this.startDrag(m,this.getNinth(m))
+  })
+  .on('mousemove','drag')
+  .on('mouseup','stopdrag')
+  .later(2000,function(){
+    this.color('orange')
+        .setHtml('you have stopped')
+  })
+```
+在这个例子中，getElement 函数产生一个对应于 `id = "myBoxDix"` 的 DOM 元素并提供了其他功能的对象，该方法允许我们移动元素，修改尺寸和样式，并添加行为。这些方法都返回该对象，所以调用返回的结果可以被下一次调用所用。
+
+## 套用
+函数也是值，从而我们可以用有趣的方式去操作函数值。套用允许我们将函数传递给它的参数相结合去产生一个新的函数。
+```js
+var add1 = add.curry(1)
+console.log(add1(6)) 
+// 7
+```
+add1 是把1传递给 add 函数的 curry 方法后创建的一个函数。add1 函数把传递给它的参数值加1。
+```js
+Function.prototype.curry = function(){
+  var args = arguments, that = this
+  return function(){
+    return that.apply(null,args.concat(arguments))
+  }
+}
+```
+curry 方法通过创建一个保存着原始函数和被套用的参数的闭包来工作。它返回另一个函数，该函数被调用时，会返回调用原始函数的结果，并传递调用 curry 时的参数加上当前被调用的参数的所有参数。它使用 concat 方法去连接两个参数数组。
+
+糟糕的是，arguments 数组并非一个真正的数组，所以它没有 concat 方法。要避开这个问题，我们必须在两个 arguments 数组上都应用数组的 slice 方法。这样产生出拥有 concat 方法的常规数组。
+```js
+
+```
+
+# 继承
+## 伪类
+JavaScript 不直接让对象从其他对象继承，而是插入一个多余的间接层：通过构造器函数产生对象。
+
+当一个函数对象被创建时，Function 构造器产生的函数对象会运行类似这样的一些代码：
+```js
+this.prototype = {constructor: this}
+```
+新函数被赋予一个 prototype 属性，它的值是一个包含 constructor 属性且属性值为该新函数的对象。这个 prototype 对象是存放继承特征的地方，因为每个 JavaScript 语言没有提供一种方法来确定哪个函数是打算用来做构造器的，所以每个函数都会得到一个 prototype 对象。constructor 属性没什么用，重要的是 prototype 对象。
+
+当采用构造器函数调用模式，即用 new 前缀去调用一个函数时，函数执行的方式会被修改，如果 new 运算符是一个方法而不是一个运算符，它有可能这样执行：
+```js
+Function.prototype.new = function(){
+  // 创建一个新对象，它继承自构造器函数的原型对象
+  var that = Object.create(this.prototype)
+  // 调用构造器函数，绑定 this 到新对象上
+  var other = this.apply(that,arguments)
+  // 如果它返回值不是一个对象，就返回该新对象
+  return (typeof other === 'object' && other ) || that
+}
+```
+我们可以定义一个构造器并扩充它的原型：
+```js
+var Mammal = function(name){
+  this.name = name
+}
+Mammal.prototype.getName = function(){
+  return this.name
+}
+Mammal.prototype.sayHi = function(){
+  return 'Hi I\'m ' + this.name + '!'
+}
+```
+我们可以构造另一个伪类来继承 Mammal，这是通过定义它的 constructor 函数并替换它的 prototype 为一个 Mammal 的实例来实现的：
+```js
+var myMammal = new Mammal('jack')
+var name = myMammal.getName()
+```
+我们可以构造另一个伪类来继承 Mammal，这是通过定义它的 constructor 函数并替换它的 prototype 为另一个 Mammal 的实例来实现的：
+```js
