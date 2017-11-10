@@ -407,5 +407,158 @@ Mammal.prototype.sayHi = function(){
 var myMammal = new Mammal('jack')
 var name = myMammal.getName()
 ```
-我们可以构造另一个伪类来继承 Mammal，这是通过定义它的 constructor 函数并替换它的 prototype 为另一个 Mammal 的实例来实现的：
+
+## 函数化
+迄今为止，我们所看到的继承模式的一个弱点就是没法保护隐私。对象的所有属性都是可见的，我们无法得到私有变量和私有属性。我们可以应用模块模式来保护隐私。
+
+我们从构造一个生成对象的函数开始，以小写字母开头来命名它，因为它不需要使用 new 前缀。
+1. 创建一个新对象。
+2. 有选择地定义私有实例变量和方法。
+3. 给新对象扩充方法。这些方法拥有特权去访问参数。
+4. 返回那个新对象。
+
+这是一个函数化构造器的伪代码模板：
 ```js
+var constructor = function(spec, my){
+    var that, 其他私有实例变量
+    my = my || {}
+    把共享的变量和函数添加到 my 中
+    that = 一个新对象
+    添加给 that 特权方法
+    return that
+}
+```
+spec 对象包含构造器需要构造一个新实例的所有信息。spec 的内容可能会被复制到私有变量中，或者被其他函数改变，或者方法可以在需要的时候访问 spec 的信息。
+
+my 对象是一个为继承链中的构造器提供秘密共享的容器。my 对象可以选择性的使用。如果没有传入一个 my 对象，那么会创建一个 my 对象。
+
+接下来声明该对象私有的实例变量和方法。通过简单地声明变量就可以做到。构造器的变量和内部函数变成了该实例化的私有成员。内部函数可以访问 spec、my、that，以及其他私有变量。
+
+接下来，给 my 对象添加共享的秘密成员。这通过赋值语句来实现：
+```
+my.member = value
+```
+现在，我们构造了一个新对象，并把它赋值给 that。my 对象允许其他的构造器分享我们放到 my 中的资料，其他构造器可能也会把自己可分享的秘密成员放进 my 对象里，以便我们的构造器可以利用它。
+
+接下来我们扩充 that，加入组成该对象接口的特权方法。我们可以分配一个新函数成为 that 的成员方法。或者，更安全的，我们可以先把函数定义成为私有方法，然后再把它们分配给 that：
+```js
+var methodical = function(){
+    ...
+}
+that.methodical = methodical
+```
+分两步去定义的好处是，如果其他方法想要调用 methodical，它们可以直接调用 methodical，而不是 that.methodical。如果该实例被破坏或篡改，甚至 that.methodical 被替换掉了，调用 methodical 的方法同样会继续工作，因为它们私有的 methodical 不受该实例被篡改的影响。
+
+最后我们返回 that。
+
+我们把这个模式应用到 mammal 例子里，name 和 saying 属性现在完全是私有的，只有 getName 和 says 两个特权方法才可以访问到它们。
+```js
+var mammal = function(spec){
+    var that = {}
+    that.getName = function(){
+        return spec.name
+    }
+    that.says = function(){
+        return spec.saying || ''
+    }
+    return that
+}
+var myMammal = mammal({name: 'Herb', saying: 'Hello'})
+myMammal
+// {getName: ƒ, says: ƒ}
+```
+函数模式化有很大的灵活性，它相比伪类模式不仅带来的工作更少，还让我们得到更好的封装和信息隐藏，以及访问父类的方法。
+
+如果对象的所有状态都是私有的，name 该对象就成为一个“防伪 tamper-proof”对象，该对象的属性可以被替换或删除，但该对象的完整性不会受到伤害。如果我们用函数化的样式去创建一个对象，并且该对象的所有方法都不使用 this 或 that，那么该对象就出持久性的。一个持久性对象就是一个简单功能函数的集合。
+
+一个持久性的对象不会被入侵。访问一个持久性的对象时，除非有方法授权，否则攻击者不能访问对象的内部状态。
+
+## 部件
+
+我们可以从一套部件中把对象组装出来。例如我们可以构造一个给任何对象添加简单事件处理特性的函数。它会给对象添加一个 on 方法、fire 方法和一个私有的事件注册表对象：
+```js
+var eventuality = function(that){
+    var registry = {}
+    that.fire = function(event){
+        var array,func,handle,i,type = typeof event === 'string' ? event : event.type
+        if(registry.hasOwnProperty(type)){
+            array = registry[type]
+            for(var i = 0; i < array.length; i++){
+                handler = array[i];
+                func = handler.method;
+                if(typeof func === 'string'){
+                    func = this[func]
+                }
+                func.apply(this,handler.parameters || [event])
+            }
+        }
+    return this
+    }
+    that.on = function(type,method,parameters){
+        var handler = {
+            method: method,
+            parameters: parameters
+        }
+        if(registry.hasOwnProperty(type)){
+            registry[type].push(handler)
+        }else{
+            registry[type] = handler
+        }
+        return this
+    }
+    return that
+}
+```
+我们可以在任何单独的对象上调用 eventuality，授予它事件处理方法。我们也可以赶在 that 被返回前在一个构造器函数中调用它。
+```
+eventuality(that)
+```
+用这种方式，一个构造器函数可以从一套部件中把对象组装出来。JavaScript 的弱类型在此处是一个巨大的优势，因为我们无需花费精力去了解对象在类型系统中的继承关系。相反，我们只需要专注它们的个性特征。
+
+如果我们想要 eventuality 访问该对象的私有状态，可以把私有成员集 my 传递给它。
+
+# 数组
+## 删除
+由于 JavaScript 的数组其实就是对象，所以 delete 运算符可以用来从数组中移除元素。
+```js
+var numbers = ['zero','one','two','three','four','five','six','seven','eight','nine']
+delete numbers[2]
+// true
+numbers
+// ["zero", "one", empty, "three", "four", "five", "six", "seven", "eight", "nine"]
+```
+不幸的是，那样会在数组下留下一个空洞，这是因为被排在删除元素之后的元素保留着它们最初的属性。而我们通常是想递减后面每个元素的属性。
+
+数组中有个 splice 方法，他、它可以删除元素，并把它们替换成其他的元素。第一个参数数组中的序号，第二个参数是要删除元素的个数，后面的参数是要新插入的元素。
+
+## 枚举
+因为 JavaScript 数组其实就是对象，所以可以通过 for in 语句来遍历一个数组的所有属性。遗憾的是 for in 无法保证属性的顺序，而大多数遍历数组的场合都期望按照阿拉伯数字顺序来产生元素。此外可能从原型链中得到意外属性的问题存在。
+
+所以我们可以通过 for 语句、forEach、for of 来进行数组的遍历。
+
+## 方法
+我们可以通过 Array.prototype 扩充数组的方法。
+
+```js
+Array.prototype.reduce = function(f,value){
+  for(var i = 0; i < this.length; i++){
+    value = f(this[i],value)
+  }
+  return value
+}
+```
+在这个例子中，我们定义了一个 reduce 方法，它接受一个函数和一个初始值作为参数。它遍历这个数组，以当前元素和该初始值为参数调用这个函数，并且计算出一个新值，当完成时，它返回这个值。如果我们传入一个把两个数字相加的函数，它会计算出相加之和。如果我们传入把两个数字相乘的函数，它会计算两者的乘积。
+```js
+Array.prototype.reducer = function(f,value){
+  for(var i = 0; i < this.length; i++){
+    value = f(this[i],value)
+  }
+  return value
+}
+var add = function(a,b){
+  return a + b
+}
+var arr = [1,2,3,4,5];
+arr.reducer(add,0)
+```
+
